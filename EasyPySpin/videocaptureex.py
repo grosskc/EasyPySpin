@@ -1,6 +1,7 @@
 import PySpin
 import cv2
 import numpy as np
+from skimage.exposure import equalize_hist
 
 from .videocapture import VideoCapture
 
@@ -50,7 +51,7 @@ class VideoCaptureEX(VideoCapture):
         super(VideoCaptureEX, self).__init__(index)
         self.average_num = 1
 
-    def read(self):
+    def read(self, dtype=np.uint16):
         """
         returns the next frame.
         The returned frame is the average of multiple images taken.
@@ -66,10 +67,14 @@ class VideoCaptureEX(VideoCapture):
             return super(VideoCaptureEX, self).read()
         else:
             imlist = [super(VideoCaptureEX, self).read()[1] for i in range(self.average_num)]
-            frame = (cv2.merge(imlist).mean(axis=2)).astype(imlist[0].dtype)
+            dtype_in = imlist[0].dtype
+            if (dtype_in == np.uint8) and (dtype == np.uint16):
+                sf = int(np.iinfo(dtype).max / np.iinfo(dtype_in).max)
+                imlist = [im.astype(dtype) * sf for im in imlist]
+            frame = (cv2.merge(imlist).mean(axis=2)).astype(dtype)
             return True, frame
 
-    def readHDR(self, t_min, t_max, num=None, t_ref=10000):
+    def readHDR(self, t_min, t_max, num=None, t_ref=10000, weighting="gaussian"):
         """
         Capture multiple images with different exposure and merge into an HDR image
 
@@ -87,6 +92,8 @@ class VideoCaptureEX(VideoCapture):
             neighboring exposure times is approximately 2x.
         t_ref : float, optional
             Reference time [us]. Determines the brightness of the merged image based on this time.
+        weighting : str, optional
+            HDR weighting function used (uniform, gaussian, tent, photon, hist_eq)
 
         Returns
         -------
@@ -117,6 +124,7 @@ class VideoCaptureEX(VideoCapture):
 
         # Exposure bracketing
         ret, imlist = self.readExposureBracketing(times)
+
         if ret == False:
             return False, None
 
@@ -132,10 +140,11 @@ class VideoCaptureEX(VideoCapture):
             max_value = 2 ** 16 - 1
         else:
             max_value = 1
+
         imlist_norm = [image / max_value for image in imlist]
 
         # Merge HDR
-        img_hdr = self.mergeHDR(imlist_norm, times, t_ref)
+        img_hdr = self.mergeHDR(imlist_norm, times, t_ref, weighting)
 
         return True, img_hdr, imlist, times
 
@@ -179,12 +188,7 @@ class VideoCaptureEX(VideoCapture):
         imlist = [None] * exposures.shape[0]
         for i, t in enumerate(exposures):
             self.set(cv2.CAP_PROP_EXPOSURE, float(t))
-
             ret, frame = self.read()
-
-            if ret == False:
-                return False, None
-
             imlist[i] = frame
 
         # Restore the changed settings
@@ -226,6 +230,37 @@ class VideoCaptureEX(VideoCapture):
         t = (np.array(times) / time_ref)[:, np.newaxis, np.newaxis]  # (num,1,1)
 
         # Calculate weight
+        do_hist_eq = False
+        if weighting == "hist_eq":
+            do_hist_eq = True
+            weighting = "uniform"
+
+        if weighting.lower() == "debevec":
+            imlist = [(im * 256).astype(np.uint8) for im in imlist]
+            imlist = [im[:, :, None] * np.ones((im.shape[0], im.shape[1], 3), dtype=np.uint8) for im in imlist]
+            times = times.astype(np.float32)
+            print("Performing HDR image construction")
+            calibrate = cv2.createCalibrateDebevec()
+            response = calibrate.process(imlist, times)
+            merge = cv2.createMergeDebevec()
+            hdr = merge.process(imlist, times, response)
+            tonemap = cv2.createTonemap(gamma=2.2)
+            img_hdr = np.clip(tonemap.process(hdr), 0, 1)[:, :, 0]
+            return img_hdr
+
+        if weighting.lower() == "robertson":
+            imlist = [(im * 256).astype(np.uint8) for im in imlist]
+            imlist = [im[:, :, None] * np.ones((im.shape[0], im.shape[1], 3), dtype=np.uint8) for im in imlist]
+            times = times.astype(np.float32)
+            print("Performing HDR image construction")
+            calibrate = cv2.createCalibrateRobertson()
+            response = calibrate.process(imlist, times)
+            merge = cv2.createMergeRobertson()
+            hdr = merge.process(imlist, times, response)
+            tonemap = cv2.createTonemap(gamma=2.2)
+            img_hdr = np.clip(tonemap.process(hdr), 0, 1)[:, :, 0]
+            return img_hdr
+
         mask = np.bitwise_and(Zmin <= z, z <= Zmax)
         if weighting == 'uniform':
             w = 1.0 * mask
@@ -247,5 +282,8 @@ class VideoCaptureEX(VideoCapture):
         over_exposed = np.all(z > Zmax, axis=0)
         img_hdr[under_exposed] = Zmin / np.max(t)
         img_hdr[over_exposed] = Zmax / np.min(t)
+
+        if do_hist_eq:
+            img_hdr = equalize_hist(img_hdr)
 
         return img_hdr

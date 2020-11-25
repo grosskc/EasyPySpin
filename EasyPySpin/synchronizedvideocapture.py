@@ -1,5 +1,6 @@
 import PySpin
 
+
 class SynchronizedVideoCapture:
     """
     Hardware synchronized video capturing.
@@ -11,6 +12,7 @@ class SynchronizedVideoCapture:
     NOTE : Currently, only two cameras (primary and secondary) are supported, but I would like to support multiple secondary cameras in the future.
     NOTE : I only have the "BFS" camera, so I haven't tested it with any other camera ("BFLY", "CM3", etc...). So, if you have a problem, please send me an issue or PR.
     """
+
     def __init__(self, cap_primary, cap_secondary):
         self.cap_primary = cap_primary
         self.cap_secondary = cap_secondary
@@ -19,7 +21,7 @@ class SynchronizedVideoCapture:
         self.cap_secondary = self._configure_as_secondary(self.cap_secondary)
 
         self.cap_primary.auto_software_trigger_execute = True
-        
+
     def __del__(self):
         self.cap_primary.release()
         self.cap_secondary.release()
@@ -29,17 +31,17 @@ class SynchronizedVideoCapture:
 
     def isOpened(self):
         return [self.cap_primary.isOpened(), self.cap_secondary.isOpened()]
-    
+
     def read(self):
         if not self.cap_primary.cam.IsStreaming():
             self.cap_primary.cam.BeginAcquisition()
-        
+
         if not self.cap_secondary.cam.IsStreaming():
             self.cap_secondary.cam.BeginAcquisition()
 
-        if (self.cap_primary.cam.TriggerMode.GetValue()==PySpin.TriggerMode_On and 
-            self.cap_primary.cam.TriggerSource.GetValue()==PySpin.TriggerSource_Software and 
-            self.cap_primary.auto_software_trigger_execute==True):
+        if (self.cap_primary.cam.TriggerMode.GetValue() == PySpin.TriggerMode_On and
+                self.cap_primary.cam.TriggerSource.GetValue() == PySpin.TriggerSource_Software and
+                self.cap_primary.auto_software_trigger_execute == True):
             self.cap_primary.cam.TriggerSoftware.Execute()
 
         ret_p, frame_p = self.cap_primary.read()
@@ -60,7 +62,7 @@ class SynchronizedVideoCapture:
 
     def _configure_as_primary(self, cap):
         series_name = self._which_camera_series(cap)
-        
+
         # Set the output line
         if series_name in ["CM3", "FL3", "GS3", "FFY-DL", "ORX"]:
             # For CM3, FL3, GS3, FFY-DL, and ORX cameras, 
@@ -87,10 +89,10 @@ class SynchronizedVideoCapture:
 
     def _configure_as_secondary(self, cap):
         series_name = self._which_camera_series(cap)
-        
+
         cap.cam.TriggerMode.SetValue(PySpin.TriggerMode_Off)
         cap.cam.TriggerSelector.SetValue(PySpin.TriggerSelector_FrameStart)
-        
+
         # Set the trigger source
         if series_name in ["BFS", "CM3", "FL3", "FFY-DL", "GS3"]:
             # For BFS, CM3, FL3, FFY-DL, and GS3 cameras, 
@@ -99,7 +101,7 @@ class SynchronizedVideoCapture:
         elif series_name in ["ORX"]:
             # For ORX cameras, from the Trigger Source drop-down, select Line 5.
             cap.cam.TriggerSource.SetValue(PySpin.TriggerSource_Line5)
-            
+
         # From the Trigger Overlap drop-down, select Read Out.
         cap.cam.TriggerOverlap.SetValue(PySpin.TriggerOverlap_ReadOut)
 

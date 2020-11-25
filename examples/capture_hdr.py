@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import argparse
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--index", type=int, default=0, help="Camera index (Default: 0)")
@@ -17,15 +18,16 @@ def main():
     args = parser.parse_args()
 
     cap = EasyPySpin.VideoCaptureEX(args.index)
-    
+
     cap.set(cv2.CAP_PROP_GAMMA, 1.0)
     cap.set(cv2.CAP_PROP_GAIN, args.gain)
-    
+
     print("Start capturing HDR image")
-    ret, img_hdr = cap.readHDR(args.min, args.max, args.num) 
-    
+    ret, img_hdr, imlist, times = cap.readHDR(args.min, args.max, args.num)
+
     print("Write {}".format(args.output))
     cv2.imwrite(args.output, img_hdr.astype(np.float32))
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     main()

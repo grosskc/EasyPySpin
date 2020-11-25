@@ -1,6 +1,8 @@
-import cv2
-import PySpin
 from sys import stderr
+
+import PySpin
+import cv2
+
 
 class VideoCapture:
     """
@@ -33,6 +35,7 @@ class VideoCapture:
     get(propId)
         Gets a property.
     """
+
     def __init__(self, index):
         """
         Parameters
@@ -41,7 +44,7 @@ class VideoCapture:
             id of the video capturing device to open.
         """
         # Check for 'index' type
-        if isinstance(index, (int, str))==False:
+        if isinstance(index, (int, str)) == False:
             raise TypeError("Argument 'index' is required to be an integer or a string")
 
         # Cerate system instance and get camera list 
@@ -50,19 +53,19 @@ class VideoCapture:
         num_cam = self._cam_list.GetSize()
 
         # Check for available cameras
-        if num_cam==0:
+        if num_cam == 0:
             print("EasyPySpin: no camera is available", file=stderr)
             self._cam_list.Clear()
             self._system.ReleaseInstance()
             return None
-        
+
         # Try to connect camera
         try:
             # Index case
             if type(index) is int:
                 # Check for 'index' bound
-                if index<0 or num_cam-1<index:
-                    print(f"EasyPySpin: out device of bound (0-{num_cam-1}): {index}", file=stderr)
+                if index < 0 or num_cam - 1 < index:
+                    print(f"EasyPySpin: out device of bound (0-{num_cam - 1}): {index}", file=stderr)
                 self.cam = self._cam_list.GetByIndex(index)
             # Serial case
             elif type(index) is str:
@@ -75,7 +78,7 @@ class VideoCapture:
 
         self.cam.Init()
         self.nodemap = self.cam.GetNodeMap()
-        
+
         s_node_map = self.cam.GetTLStreamNodeMap()
         handling_mode = PySpin.CEnumerationPtr(s_node_map.GetNode('StreamBufferHandlingMode'))
         handling_mode_entry = handling_mode.GetEntryByName('NewestOnly')
@@ -84,7 +87,7 @@ class VideoCapture:
         self.grabTimeout = PySpin.EVENT_TIMEOUT_INFINITE
         self.streamID = 0
         self.auto_software_trigger_execute = False
-        
+
     def __del__(self):
         try:
             if self.cam.IsStreaming():
@@ -93,7 +96,8 @@ class VideoCapture:
             del self.cam
             self._cam_list.Clear()
             self._system.ReleaseInstance()
-        except: pass
+        except:
+            pass
 
     def release(self):
         """
@@ -105,8 +109,10 @@ class VideoCapture:
         """
         Returns true if video capturing has been initialized already.
         """
-        try: return self.cam.IsValid()
-        except: return False
+        try:
+            return self.cam.IsValid()
+        except:
+            return False
 
     def read(self):
         """
@@ -121,21 +127,21 @@ class VideoCapture:
         """
         if not self.cam.IsStreaming():
             self.cam.BeginAcquisition()
-        
+
         # Execute a software trigger if necessary 
-        if (self.cam.TriggerMode.GetValue()  ==PySpin.TriggerMode_On and 
-            self.cam.TriggerSource.GetValue()==PySpin.TriggerSource_Software and 
-            self.auto_software_trigger_execute==True):
+        if (self.cam.TriggerMode.GetValue() == PySpin.TriggerMode_On and
+                self.cam.TriggerSource.GetValue() == PySpin.TriggerSource_Software and
+                self.auto_software_trigger_execute == True):
             self.cam.TriggerSoftware.Execute()
 
         image = self.cam.GetNextImage(self.grabTimeout, self.streamID)
         if image.IsIncomplete():
             return False, None
-        
+
         img_NDArray = image.GetNDArray()
         image.Release()
         return True, img_NDArray
-    
+
     def set(self, propId, value):
         """
         Sets a property in the VideoCapture.
@@ -152,52 +158,52 @@ class VideoCapture:
         retval : bool
            True if property setting success.
         """
-        #Exposure setting
-        if propId==cv2.CAP_PROP_EXPOSURE:
-            #Auto
-            if value<0: return self._set_ExposureAuto(PySpin.ExposureAuto_Continuous)
+        # Exposure setting
+        if propId == cv2.CAP_PROP_EXPOSURE:
+            # Auto
+            if value < 0: return self._set_ExposureAuto(PySpin.ExposureAuto_Continuous)
 
-            #Manual
+            # Manual
             ret = self._set_ExposureAuto(PySpin.ExposureAuto_Off)
-            if ret==False: return False
+            if ret == False: return False
             return self._set_ExposureTime(value)
-        
-        #Gain setting
-        if propId==cv2.CAP_PROP_GAIN:
-            #Auto
-            if value<0: return self._set_GainAuto(PySpin.GainAuto_Continuous)
-            
-            #Manual
+
+        # Gain setting
+        if propId == cv2.CAP_PROP_GAIN:
+            # Auto
+            if value < 0: return self._set_GainAuto(PySpin.GainAuto_Continuous)
+
+            # Manual
             ret = self._set_GainAuto(PySpin.GainAuto_Off)
-            if ret==False: return False
+            if ret == False: return False
             return self._set_Gain(value)
 
-        #Brightness(EV) setting
-        if propId==cv2.CAP_PROP_BRIGHTNESS:
+        # Brightness(EV) setting
+        if propId == cv2.CAP_PROP_BRIGHTNESS:
             return self._set_Brightness(value)
-        
-        #Gamma setting
-        if propId==cv2.CAP_PROP_GAMMA:
+
+        # Gamma setting
+        if propId == cv2.CAP_PROP_GAMMA:
             return self._set_Gamma(value)
 
-        #FrameRate setting
-        if propId==cv2.CAP_PROP_FPS:
+        # FrameRate setting
+        if propId == cv2.CAP_PROP_FPS:
             return self._set_FrameRate(value)
 
-        #BackLigth setting
-        if propId==cv2.CAP_PROP_BACKLIGHT:
+        # BackLigth setting
+        if propId == cv2.CAP_PROP_BACKLIGHT:
             return self._set_BackLight(value)
-        
-        #Trigger Mode setting (ON/OFF)
-        if propId==cv2.CAP_PROP_TRIGGER:
+
+        # Trigger Mode setting (ON/OFF)
+        if propId == cv2.CAP_PROP_TRIGGER:
             return self._set_Trigger(value)
 
-        #TriggerDelay setting
-        if propId==cv2.CAP_PROP_TRIGGER_DELAY:
+        # TriggerDelay setting
+        if propId == cv2.CAP_PROP_TRIGGER_DELAY:
             return self._set_TriggerDelay(value)
 
         return False
-    
+
     def get(self, propId):
         """
         Returns the specified VideoCapture property.
@@ -212,44 +218,44 @@ class VideoCapture:
         value : int or float or bool
            Value for the specified property. Value Flase is returned when querying a property that is not supported.
         """
-        if propId==cv2.CAP_PROP_EXPOSURE:
+        if propId == cv2.CAP_PROP_EXPOSURE:
             return self._get_ExposureTime()
 
-        if propId==cv2.CAP_PROP_GAIN:
+        if propId == cv2.CAP_PROP_GAIN:
             return self._get_Gain()
 
-        if propId==cv2.CAP_PROP_BRIGHTNESS:
+        if propId == cv2.CAP_PROP_BRIGHTNESS:
             return self._get_Brightness()
 
-        if propId==cv2.CAP_PROP_GAMMA:
+        if propId == cv2.CAP_PROP_GAMMA:
             return self._get_Gamma()
 
-        if propId==cv2.CAP_PROP_FRAME_WIDTH:
+        if propId == cv2.CAP_PROP_FRAME_WIDTH:
             return self._get_Width()
 
-        if propId==cv2.CAP_PROP_FRAME_HEIGHT:
+        if propId == cv2.CAP_PROP_FRAME_HEIGHT:
             return self._get_Height()
 
-        if propId==cv2.CAP_PROP_FPS:
+        if propId == cv2.CAP_PROP_FPS:
             return self._get_FrameRate()
 
-        if propId==cv2.CAP_PROP_TEMPERATURE:
+        if propId == cv2.CAP_PROP_TEMPERATURE:
             return self._get_Temperature()
 
-        if propId==cv2.CAP_PROP_BACKLIGHT:
+        if propId == cv2.CAP_PROP_BACKLIGHT:
             return self._get_BackLight()
 
-        if propId==cv2.CAP_PROP_TRIGGER:
+        if propId == cv2.CAP_PROP_TRIGGER:
             return self._get_Trigger()
 
-        if propId==cv2.CAP_PROP_TRIGGER_DELAY:
+        if propId == cv2.CAP_PROP_TRIGGER_DELAY:
             return self._get_TriggerDelay()
 
         return False
-    
+
     def __clip(self, a, a_min, a_max):
         return min(max(a, a_min), a_max)
-    
+
     def _set_ExposureTime(self, value):
         if not type(value) in (int, float): return False
         exposureTime_to_set = self.__clip(value, self.cam.ExposureTime.GetMin(), self.cam.ExposureTime.GetMax())
@@ -269,10 +275,11 @@ class VideoCapture:
     def _set_GainAuto(self, value):
         self.cam.GainAuto.SetValue(value)
         return True
-    
+
     def _set_Brightness(self, value):
         if not type(value) in (int, float): return False
-        brightness_to_set = self.__clip(value, self.cam.AutoExposureEVCompensation.GetMin(), self.cam.AutoExposureEVCompensation.GetMax())
+        brightness_to_set = self.__clip(value, self.cam.AutoExposureEVCompensation.GetMin(),
+                                        self.cam.AutoExposureEVCompensation.GetMax())
         self.cam.AutoExposureEVCompensation.SetValue(brightness_to_set)
         return True
 
@@ -290,16 +297,19 @@ class VideoCapture:
         return True
 
     def _set_BackLight(self, value):
-        if value==True:backlight_to_set = PySpin.DeviceIndicatorMode_Active
-        elif value==False: backlight_to_set = PySpin.DeviceIndicatorMode_Inactive
-        else: return False
+        if value == True:
+            backlight_to_set = PySpin.DeviceIndicatorMode_Active
+        elif value == False:
+            backlight_to_set = PySpin.DeviceIndicatorMode_Inactive
+        else:
+            return False
         self.cam.DeviceIndicatorMode.SetValue(backlight_to_set)
         return True
 
     def _set_Trigger(self, value):
-        if value==True:
+        if value == True:
             trigger_mode_to_set = PySpin.TriggerMode_On
-        elif value==False:
+        elif value == False:
             trigger_mode_to_set = PySpin.TriggerMode_Off
         else:
             return False
@@ -339,13 +349,13 @@ class VideoCapture:
 
     def _get_BackLight(self):
         status = self.cam.DeviceIndicatorMode.GetValue()
-        return (True  if status == PySpin.DeviceIndicatorMode_Active else
+        return (True if status == PySpin.DeviceIndicatorMode_Active else
                 False if status == PySpin.DeviceIndicatorMode_Inactive else
                 status)
-    
+
     def _get_Trigger(self):
         status = self.cam.TriggerMode.GetValue()
-        return (True  if status == PySpin.TriggerMode_On else
+        return (True if status == PySpin.TriggerMode_On else
                 False if status == PySpin.TriggerMode_Off else
                 status)
 

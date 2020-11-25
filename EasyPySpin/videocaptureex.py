@@ -1,7 +1,9 @@
-import cv2
 import PySpin
+import cv2
 import numpy as np
+
 from .videocapture import VideoCapture
+
 
 class VideoCaptureEX(VideoCapture):
     """
@@ -37,6 +39,7 @@ class VideoCaptureEX(VideoCapture):
     get(propId)
         Gets a property.
     """
+
     def __init__(self, index):
         """
         Parameters
@@ -59,13 +62,12 @@ class VideoCaptureEX(VideoCapture):
         image : array_like 
             grabbed image is returned here. If no image has been grabbed the image will be None.
         """
-        if self.average_num==1:
+        if self.average_num == 1:
             return super(VideoCaptureEX, self).read()
         else:
-            imlist = [ super(VideoCaptureEX, self).read()[1] for i in range(self.average_num) ]
+            imlist = [super(VideoCaptureEX, self).read()[1] for i in range(self.average_num)]
             frame = (cv2.merge(imlist).mean(axis=2)).astype(imlist[0].dtype)
             return True, frame
-    
 
     def readHDR(self, t_min, t_max, num=None, t_ref=10000):
         """
@@ -81,7 +83,8 @@ class VideoCaptureEX(VideoCapture):
             maximum exposure time [us]
         num : int
             number of shots.
-            If 'num' is None, 'num' is automatically determined from 't_min' and 't_max'. It is set so that the ratio of neighboring exposure times is approximately 2x.
+            If 'num' is None, 'num' is automatically determined from 't_min' and 't_max'. It is set so that the ratio of
+            neighboring exposure times is approximately 2x.
         t_ref : float, optional
             Reference time [us]. Determines the brightness of the merged image based on this time.
 
@@ -95,47 +98,46 @@ class VideoCaptureEX(VideoCapture):
         # Set between the maximum and minimum values of the camera
         t_min = np.clip(t_min, self.cam.ExposureTime.GetMin(), self.cam.ExposureTime.GetMax())
         t_max = np.clip(t_max, self.cam.ExposureTime.GetMin(), self.cam.ExposureTime.GetMax())
-        
+
         # Original settings for gamma
         gamma_origin = self.get(cv2.CAP_PROP_GAMMA)
 
         # To capture a linear image, the gamma value is set to 1.0
         self.set(cv2.CAP_PROP_GAMMA, 1.0)
-        
+
         # If 'num' is None, determine num.
         if num is None:
-            r = 2 # Ratio of exposure time
+            r = 2  # Ratio of exposure time
             num = 2
-            while t_max>t_min*(r**num): num += 1
+            while t_max > t_min * (r ** num): num += 1
 
         # Exposure time to be taken 
         # The equality sequence from minimum (t_min) to maximum (t_max) exposure time
         times = np.geomspace(t_min, t_max, num=num)
-       
+
         # Exposure bracketing
         ret, imlist = self.readExposureBracketing(times)
-        if ret==False:
+        if ret == False:
             return False, None
-        
+
         # Restore the changed gamma
         self.set(cv2.CAP_PROP_GAMMA, gamma_origin)
-        
+
         # Normalize to a value between 0 and 1
         # By dividing by the maximum value
         dtype = imlist[0].dtype
-        if dtype==np.uint8:
-            max_value = 2**8-1
-        elif dtype==np.uint16:
-            max_value = 2**16-1
+        if dtype == np.uint8:
+            max_value = 2 ** 8 - 1
+        elif dtype == np.uint16:
+            max_value = 2 ** 16 - 1
         else:
             max_value = 1
-        imlist_norm = [ image/max_value for image in imlist]
-        
+        imlist_norm = [image / max_value for image in imlist]
+
         # Merge HDR
         img_hdr = self.mergeHDR(imlist_norm, times, t_ref)
 
-        return True, img_hdr
-   
+        return True, img_hdr, imlist, times
 
     def readExposureBracketing(self, exposures):
         """
@@ -162,7 +164,7 @@ class VideoCaptureEX(VideoCapture):
         ExposureTime_origin = self.cam.ExposureTime.GetValue()
         GainAuto_origin = self.cam.GainAuto.GetValue()
         Gain_origin = self.cam.Gain.GetValue()
-        
+
         # Change the trigger setting
         self.cam.TriggerSelector.SetValue(PySpin.TriggerSelector_FrameStart)
         self.cam.TriggerMode.SetValue(PySpin.TriggerMode_On)
@@ -172,19 +174,19 @@ class VideoCaptureEX(VideoCapture):
         # Auto gain off and fixing gain
         self.cam.GainAuto.SetValue(PySpin.GainAuto_Off)
         self.cam.Gain.SetValue(Gain_origin)
-        
+
         # Capture start
-        imlist = [None]*exposures.shape[0]
-        for i , t in enumerate(exposures):
+        imlist = [None] * exposures.shape[0]
+        for i, t in enumerate(exposures):
             self.set(cv2.CAP_PROP_EXPOSURE, float(t))
 
             ret, frame = self.read()
 
-            if ret==False:
+            if ret == False:
                 return False, None
 
             imlist[i] = frame
-       
+
         # Restore the changed settings
         self.cam.EndAcquisition()
         self.cam.TriggerSelector.SetValue(TriggerSelector_origin)
@@ -197,7 +199,6 @@ class VideoCaptureEX(VideoCapture):
 
         return True, imlist
 
-   
     def mergeHDR(self, imlist, times, time_ref=10000, weighting='gaussian'):
         """
         Merge an HDR image from LDR images.
@@ -221,30 +222,30 @@ class VideoCaptureEX(VideoCapture):
         Zmin = 0.01
         Zmax = 0.99
         epsilon = 1e-32
-        z = np.array(imlist) # (num, height, width)
-        t = (np.array(times) / time_ref)[:, np.newaxis, np.newaxis] # (num,1,1)
+        z = np.array(imlist)  # (num, height, width)
+        t = (np.array(times) / time_ref)[:, np.newaxis, np.newaxis]  # (num,1,1)
 
         # Calculate weight
-        mask = np.bitwise_and(Zmin<=z, z<=Zmax)
-        if   weighting=='uniform':
+        mask = np.bitwise_and(Zmin <= z, z <= Zmax)
+        if weighting == 'uniform':
             w = 1.0 * mask
-        elif weighting=='tent':
-            w = (0.5-np.abs(z-0.5)) * mask
-        elif weighting=='gaussian':
-            w = np.exp(-4*((z-0.5)/0.5)**2) * mask
-        elif weighting=='photon':
-            w = t*np.ones_like(z) * mask
+        elif weighting == 'tent':
+            w = (0.5 - np.abs(z - 0.5)) * mask
+        elif weighting == 'gaussian':
+            w = np.exp(-4 * ((z - 0.5) / 0.5) ** 2) * mask
+        elif weighting == 'photon':
+            w = t * np.ones_like(z) * mask
         else:
             raise ValueError(f"Unknown weighting scheme '{weighting}'.")
-        
+
         # Merge HDR
-        img_hdr = np.sum(w*z/t, axis=0) / (np.sum(w, axis=0) + epsilon)
-        #img_hdr = np.exp(np.sum(w*(np.log(z+epsilon)-np.log(t)), axis=0)/(np.sum(w, axis=0)+1e-32))
+        img_hdr = np.sum(w * z / t, axis=0) / (np.sum(w, axis=0) + epsilon)
+        # img_hdr = np.exp(np.sum(w*(np.log(z+epsilon)-np.log(t)), axis=0)/(np.sum(w, axis=0)+1e-32))
 
         # Dealing with under-exposure and over-exposure
-        under_exposed = np.all(Zmin>z, axis=0)
-        over_exposed  = np.all(z>Zmax, axis=0)
-        img_hdr[under_exposed] = Zmin/np.max(t)
-        img_hdr[over_exposed]  = Zmax/np.min(t)
+        under_exposed = np.all(Zmin > z, axis=0)
+        over_exposed = np.all(z > Zmax, axis=0)
+        img_hdr[under_exposed] = Zmin / np.max(t)
+        img_hdr[over_exposed] = Zmax / np.min(t)
 
         return img_hdr
